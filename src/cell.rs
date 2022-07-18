@@ -15,6 +15,7 @@ impl Plugin for CellPlugin {
   }
 }
 
+const CELL_GRID_SIZE: f32 = 16.;
 const CELL_SIZE: Vec3 = const_vec3!([0.25, 0.25, 0.]);
 
 struct CellTexture(Handle<Image>);
@@ -61,8 +62,8 @@ impl Cell {
     let mut cell_frame = cell_frame.single_mut();
     let cam_pos = camera.single();
   
-    cell_frame.translation.x = 16. * (cam_pos.world.x / 16. as f32).round();
-    cell_frame.translation.y = 16. * (cam_pos.world.y / 16. as f32).round();
+    cell_frame.translation.x = CELL_GRID_SIZE * (cam_pos.world.x / CELL_GRID_SIZE as f32).round();
+    cell_frame.translation.y = CELL_GRID_SIZE * (cam_pos.world.y / CELL_GRID_SIZE as f32).round();
   }
 
   fn spawn(
