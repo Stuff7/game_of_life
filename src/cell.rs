@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy::input::mouse::MouseMotion;
 use bevy::math::const_vec3;
-use super::main_camera::{MainCamera, CameraPosition};
+
+use crate::main_camera::Cursor;
 
 pub struct CellPlugin;
 
@@ -18,13 +19,6 @@ impl Plugin for CellPlugin {
 const CELL_GRID_SIZE: f32 = 16.;
 const CELL_SIZE: Vec3 = const_vec3!([0.25, 0.25, 0.]);
 
-struct CellTexture(Handle<Image>);
-
-struct CellMap(HashMap<String, bool>);
-
-#[derive(Component)]
-struct CellFrame;
-
 #[derive(Component)]
 struct Cell;
 
@@ -35,14 +29,14 @@ impl Cell {
     commands.insert_resource(CellTexture(cell_texture));
 
     commands.insert_resource(CellMap(HashMap::new()));
-  
+
     commands
     .spawn()
     .insert(CellFrame)
     .insert_bundle(SpriteBundle {
       transform: Transform {
         scale: CELL_SIZE,
-        translation: Vec3::new(16., 16., 1.),
+        translation: Vec3::new(0., 0., 1.),
         ..default()
       },
       texture: cell_frame_texture,
@@ -52,18 +46,21 @@ impl Cell {
 
   fn highlight(
     motion_evr: EventReader<MouseMotion>,
-    camera: Query<&CameraPosition, (With<MainCamera>, Without<CellFrame>)>,
-    mut cell_frame: Query<&mut Transform, (With<CellFrame>, Without<MainCamera>)>,
+    cursor: Res<Cursor>,
+    mut cell_frame: Query<&mut Transform, With<CellFrame>>,
   ) {
     if motion_evr.is_empty() {
       return;
     }
   
     let mut cell_frame = cell_frame.single_mut();
-    let cam_pos = camera.single();
   
-    cell_frame.translation.x = CELL_GRID_SIZE * (cam_pos.world.x / CELL_GRID_SIZE as f32).round();
-    cell_frame.translation.y = CELL_GRID_SIZE * (cam_pos.world.y / CELL_GRID_SIZE as f32).round();
+    cell_frame.translation.x = CELL_GRID_SIZE * (
+      cursor.world_coords.x / CELL_GRID_SIZE as f32
+    ).round();
+    cell_frame.translation.y = CELL_GRID_SIZE * (
+      cursor.world_coords.y / CELL_GRID_SIZE as f32
+    ).round();
   }
 
   fn spawn(
@@ -78,15 +75,16 @@ impl Cell {
     }
   
     let cell_frame = cell_frame.single();
+    let cell_map = &mut cell_map.0;
     let cell_key = format!(
       "{}:{}",
       cell_frame.translation.x,
       cell_frame.translation.y,
     );
 
-    let cell_is_empty = !*cell_map.0.get(&cell_key).unwrap_or(&false);
+    let cell_is_empty = !*cell_map.get(&cell_key).unwrap_or(&false);
     if cell_is_empty {
-      cell_map.0.insert(cell_key, true);
+      cell_map.insert(cell_key, true);
       commands
       .spawn()
       .insert(Cell)
@@ -102,3 +100,10 @@ impl Cell {
     }
   }
 }
+
+struct CellTexture(Handle<Image>);
+
+struct CellMap(HashMap<String, bool>);
+
+#[derive(Component)]
+struct CellFrame;
