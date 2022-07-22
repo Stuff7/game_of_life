@@ -82,7 +82,7 @@ impl Cell {
         if cell.is_alive() {
           if !game_rules.survive.contains(&neighbor.neighbor_count) {
             cell.die();
-            Self::insert_neighborhood(
+            Self::update_neighborhood(
               &mut commands,
               &cell_texture.0,
               &mut neighbor_map,
@@ -93,7 +93,7 @@ impl Cell {
         } else {
           if game_rules.revive.contains(&neighbor.neighbor_count) {
             cell.revive();
-            Self::insert_neighborhood(
+            Self::update_neighborhood(
               &mut commands,
               &cell_texture.0,
               &mut neighbor_map,
@@ -209,7 +209,7 @@ impl Cell {
         if cell.is_dead() {
           cell.revive();
           cell_shape.is_visible = true;
-          Self::insert_neighborhood(
+          Self::update_neighborhood(
             &mut commands,
             &cell_texture.0,
             &mut neighbor_map,
@@ -219,7 +219,7 @@ impl Cell {
         }
       }
       None => {
-        Self::insert_neighborhood(
+        Self::update_neighborhood(
           &mut commands,
           &cell_texture.0,
           &mut neighbor_map,
@@ -230,9 +230,9 @@ impl Cell {
     }
   }
 
-  /// Insert a new neighborhood using the cell with cell_id as the center
+  /// Create a new neighborhood using the cell with cell_id as the center
   /// If the neighborhood already exists, update every neighbors count
-  fn insert_neighborhood(
+  fn update_neighborhood(
     mut commands: &mut Commands,
     cell_texture: &Handle<Image>,
     neighbor_map: &mut HashMap<(i32, i32), Neighbor>,
