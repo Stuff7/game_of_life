@@ -18,7 +18,7 @@ impl Plugin for CellPlugin {
       SystemSet::new()
       .with_run_criteria(FixedTimestep::step(TIME_STEP))
       .with_system(Cell::run_generation.label("run_generation"))
-      .with_system(Cell::update_subjects.after("run_generation"))
+      .with_system(Cell::update_grid.after("run_generation"))
     )
     .add_system(Cell::highlight)
     .add_system(Cell::spawn);
@@ -68,7 +68,7 @@ impl Cell {
     game_rules: Res<GameRules>,
     cell_texture: Res<CellTexture>,
     mut neighbor_map: ResMut<NeighborMap>,
-    mut cells: Query<(&mut Cell, &mut Visibility), With<SubjectToRules>>,
+    mut cells: Query<(&mut Cell, &mut Visibility)>,
   ) {
     if !game_rules.running {
       return;
@@ -107,21 +107,22 @@ impl Cell {
     }
   }
 
-  fn update_subjects(
+  fn update_grid(
     mut commands: Commands,
     game_rules: Res<GameRules>,
-    neighbor_map: Res<NeighborMap>,
-    cells: Query<(Entity, &Cell), With<SubjectToRules>>,
+    mut neighbor_map: ResMut<NeighborMap>,
+    cells: Query<(Entity, &Cell)>,
   ) {
     if !game_rules.running {
       return;
     }
-    let neighbor_map = &neighbor_map.0;
+    let neighbor_map = &mut neighbor_map.0;
     cells.for_each(|(cell_entity, cell)| {
       if cell.is_dead() {
         if let Some(neighbor) = neighbor_map.get(&cell.id) {
           if neighbor.neighbor_count == 0 {
-            commands.entity(cell_entity).remove::<SubjectToRules>();
+            commands.entity(cell_entity).despawn();
+            neighbor_map.remove(&cell.id);
           }
         }
       }
@@ -132,41 +133,20 @@ impl Cell {
     keyboard: Res<Input<KeyCode>>,
     mut game_rules: ResMut<GameRules>,
     neighbor_map: Res<NeighborMap>,
-    cells: Query<(Entity, &Cell, &Transform), Without<SubjectToRules>>,
-    subject_cells: Query<(Entity, &Cell, &Transform), With<SubjectToRules>>,
+    cells: Query<&Cell>,
     cell_frame: Query<&Transform, With<CellFrame>>,
   ) {
     if keyboard.just_pressed(KeyCode::Space) {
       game_rules.running = !game_rules.running;
-    } else if 
-      keyboard.just_pressed(KeyCode::P) ||
-      keyboard.just_pressed(KeyCode::O)
-    {
+    } else if keyboard.just_pressed(KeyCode::P) {
       let neighbor_map = &neighbor_map.0;
-      println!("-------- CELLS --------");
+      println!("-------- DEBUG --------");
       let mut entity_count = 0;
-      subject_cells.for_each(|(entity, cell, transform)| {
-        if let Some(neighbor) = neighbor_map.get(&cell.id) {
+      cells.for_each(|cell| {
+        if neighbor_map.contains_key(&cell.id) {
           entity_count = entity_count + 1;
-          println!(
-            "<S> {entity:?}:[{}, {}] -> {cell:?} {neighbor:?}\n",
-            transform.translation.x,
-            transform.translation.y,
-          );
         }
       });
-      if keyboard.just_pressed(KeyCode::O) {
-        cells.for_each(|(entity, cell, transform)| {
-          entity_count = entity_count + 1;
-          if let Some(neighbor) = neighbor_map.get(&cell.id) {
-            println!(
-              "{entity:?}:[{}, {}] -> {cell:?} {neighbor:?}\n",
-              transform.translation.x,
-              transform.translation.y,
-            );
-          }
-        });
-      }
       println!("Entities: {entity_count}");
       println!("-------- -END- --------");
     } else if keyboard.just_pressed(KeyCode::C) {
@@ -265,9 +245,6 @@ impl Cell {
           neighbor.neighbor_count = if is_cell_dead {
             neighbor.neighbor_count - 1
           } else {neighbor.neighbor_count + 1};
-          if neighbor.neighbor_count > 0 {
-            commands.entity(neighbor.entity).insert(SubjectToRules);
-          }
         }
         None => {
           // Create a dummy empty cell when there's no cell in this space
@@ -284,11 +261,7 @@ impl Cell {
         }
       }
     }
-    if let Some(neighbor) = neighbor_map.get(&cell_id) {
-      if neighbor.neighbor_count > 0 {
-        commands.entity(neighbor.entity).insert(SubjectToRules);
-      }
-    } else {
+    if !neighbor_map.contains_key(&cell_id) {
       let entity = Self::create_cell_entity(
         &mut commands,
         cell_texture,
@@ -310,7 +283,6 @@ impl Cell {
     let entity = entity_cmds.id();
     entity_cmds
     .insert(cell)
-    .insert(SubjectToRules)
     .insert_bundle(SpriteBundle {
       transform: Transform {
         scale: CELL_SIZE,
@@ -329,9 +301,6 @@ impl Cell {
 struct CellFrame;
 
 struct CellTexture(Handle<Image>);
-
-#[derive(Component)]
-struct SubjectToRules;
 
 struct GameRules {
   running: bool,
