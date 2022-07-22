@@ -251,7 +251,7 @@ impl Cell {
   }
 
   /// Insert a new neighborhood using the cell with cell_id as the center
-  /// If the neighborhood already exists, update the every neighbors count
+  /// If the neighborhood already exists, update every neighbors count
   fn insert_neighborhood(
     mut commands: &mut Commands,
     cell_texture: &Handle<Image>,
