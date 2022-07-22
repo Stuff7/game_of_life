@@ -4,7 +4,6 @@ use bevy::prelude::*;
 use bevy::input::mouse::MouseMotion;
 use bevy::math::const_vec3;
 use bevy::core::FixedTimestep;
-use bevy::render::view::visibility;
 
 use crate::main_camera::Cursor;
 
@@ -18,7 +17,8 @@ impl Plugin for CellPlugin {
     .add_system_set(
       SystemSet::new()
       .with_run_criteria(FixedTimestep::step(TIME_STEP))
-      .with_system(Cell::run_generation)
+      .with_system(Cell::run_generation.label("run_generation"))
+      .with_system(Cell::update_subjects.after("run_generation"))
     )
     .add_system(Cell::highlight)
     .add_system(Cell::spawn);
@@ -31,9 +31,8 @@ const CELL_SIZE: Vec3 = const_vec3!([0.25, 0.25, 0.]);
 
 #[derive(Component, Debug)]
 struct Cell {
+  id: (i32, i32),
   populated: bool,
-  living_neighbors: u8,
-  neighbors: Option<[Entity; 8]>,
 }
 
 impl Cell {
@@ -48,7 +47,7 @@ impl Cell {
       revive: (3..4),
     });
 
-    commands.insert_resource(EntityMap(HashMap::new()));
+    commands.insert_resource(NeighborMap(HashMap::new()));
 
     commands
     .spawn()
@@ -65,75 +64,115 @@ impl Cell {
   }
 
   fn run_generation(
+    mut commands: Commands,
     game_rules: Res<GameRules>,
+    cell_texture: Res<CellTexture>,
+    mut neighbor_map: ResMut<NeighborMap>,
     mut cells: Query<(&mut Cell, &mut Visibility), With<SubjectToRules>>,
   ) {
     if !game_rules.running {
       return;
     }
+    let mut neighbor_map = &mut neighbor_map.0;
+    let mut old_neighbor_map = HashMap::new();
+    old_neighbor_map.clone_from(&neighbor_map);
 
-    let mut counts: Vec<Option<u8>> = Vec::new();
-    cells.for_each(|(cell, _)| {
-      if cell.neighbors.is_none() {
-        counts.push(None);
-        return;
-      }
-
-      let neighbors = cell.neighbors.unwrap();
-      let neighbors = cells.get_many(neighbors);
-      if neighbors.is_err() {
-        counts.push(None);
-        return;
-      }
-
-      // Count living neighbors
-      let neighbors = neighbors.unwrap();
-      let mut count: u8 = 0;
-      for (neighbor, _) in neighbors {
-        if neighbor.is_alive() {
-          count = count + 1;
-        }
-      }
-      counts.push(Some(count));
-    });
-
-    for (
-      i,
-      (mut cell, mut visibility),
-    ) in cells.iter_mut().enumerate() {
-      let mut living_neighbors: &u8 = &0;
-      let count = counts.get(i);
-      if let Some(count) = count {
-        if let Some(count) = count {
-          living_neighbors = count;
-        }
-      }
-      if cell.is_alive() {
-        if !game_rules.survive.contains(living_neighbors) {
-          cell.die();
-        }
-      } else {
-        if game_rules.revive.contains(living_neighbors) {
-          cell.revive();
+    for (mut cell, mut visibility) in cells.iter_mut() {
+      if let Some(neighbor) = old_neighbor_map.get(&cell.id) {
+        if cell.is_alive() {
+          if !game_rules.survive.contains(&neighbor.neighbor_count) {
+            cell.die();
+            Self::insert_neighborhood(
+              &mut commands,
+              &cell_texture.0,
+              &mut neighbor_map,
+              cell.id,
+              true,
+            );
+          }
+        } else {
+          if game_rules.revive.contains(&neighbor.neighbor_count) {
+            cell.revive();
+            Self::insert_neighborhood(
+              &mut commands,
+              &cell_texture.0,
+              &mut neighbor_map,
+              cell.id,
+              false,
+            );
+          }
         }
       }
       visibility.is_visible = cell.is_alive();
     }
   }
 
+  fn update_subjects(
+    mut commands: Commands,
+    game_rules: Res<GameRules>,
+    neighbor_map: Res<NeighborMap>,
+    cells: Query<(Entity, &Cell), With<SubjectToRules>>,
+  ) {
+    if !game_rules.running {
+      return;
+    }
+    let neighbor_map = &neighbor_map.0;
+    cells.for_each(|(cell_entity, cell)| {
+      if cell.is_dead() {
+        if let Some(neighbor) = neighbor_map.get(&cell.id) {
+          if neighbor.neighbor_count == 0 {
+            commands.entity(cell_entity).remove::<SubjectToRules>();
+          }
+        }
+      }
+    })
+  }
+
   fn keyboard_input(
     keyboard: Res<Input<KeyCode>>,
     mut game_rules: ResMut<GameRules>,
-    cells: Query<(Entity, &Cell), With<Cell>>,
+    neighbor_map: Res<NeighborMap>,
+    cells: Query<(Entity, &Cell, &Transform), Without<SubjectToRules>>,
+    subject_cells: Query<(Entity, &Cell, &Transform), With<SubjectToRules>>,
+    cell_frame: Query<&Transform, With<CellFrame>>,
   ) {
     if keyboard.just_pressed(KeyCode::Space) {
       game_rules.running = !game_rules.running;
-    }else if keyboard.just_pressed(KeyCode::P) {
+    } else if 
+      keyboard.just_pressed(KeyCode::P) ||
+      keyboard.just_pressed(KeyCode::O)
+    {
+      let neighbor_map = &neighbor_map.0;
       println!("-------- CELLS --------");
-      for (entity, cell) in cells.iter() {
-        println!("{entity:?} -> {cell:?}\n");
+      let mut entity_count = 0;
+      subject_cells.for_each(|(entity, cell, transform)| {
+        if let Some(neighbor) = neighbor_map.get(&cell.id) {
+          entity_count = entity_count + 1;
+          println!(
+            "<S> {entity:?}:[{}, {}] -> {cell:?} {neighbor:?}\n",
+            transform.translation.x,
+            transform.translation.y,
+          );
+        }
+      });
+      if keyboard.just_pressed(KeyCode::O) {
+        cells.for_each(|(entity, cell, transform)| {
+          entity_count = entity_count + 1;
+          if let Some(neighbor) = neighbor_map.get(&cell.id) {
+            println!(
+              "{entity:?}:[{}, {}] -> {cell:?} {neighbor:?}\n",
+              transform.translation.x,
+              transform.translation.y,
+            );
+          }
+        });
       }
+      println!("Entities: {entity_count}");
       println!("-------- -END- --------");
+    } else if keyboard.just_pressed(KeyCode::C) {
+      if let Ok(cell_frame) = cell_frame.get_single() {
+        println!("COORDS: ({}, {})", cell_frame.translation.x, cell_frame.translation.y);
+      }
     }
   }
 
@@ -160,7 +199,7 @@ impl Cell {
     mut commands: Commands,
     mouse: Res<Input<MouseButton>>,
     cell_texture: Res<CellTexture>,
-    mut entity_map: ResMut<EntityMap>,
+    mut neighbor_map: ResMut<NeighborMap>,
     cell_frame: Query<&Transform, With<CellFrame>>,
     mut cells: Query<(&mut Cell, &mut Visibility), With<Cell>>,
   ) {
@@ -168,16 +207,16 @@ impl Cell {
       return
     }
 
-    let mut entity_map = &mut entity_map.0;
+    let mut neighbor_map = &mut neighbor_map.0;
     let cell_frame = cell_frame.single();
     let cell_id = (
       cell_frame.translation.x as i32,
       cell_frame.translation.y as i32,
     );
 
-    let cell = match entity_map.get(&cell_id) {
-      Some(entity) => {
-        match cells.get_mut(*entity) {
+    let cell = match neighbor_map.get(&cell_id) {
+      Some(neighbor) => {
+        match cells.get_mut(neighbor.entity) {
           Ok(cell_match) => Some(cell_match),
           Err(_) => None,
         }
@@ -187,77 +226,88 @@ impl Cell {
 
     match cell {
       Some((mut cell, mut cell_shape)) => {
-        cell.revive();
-        cell_shape.is_visible = true;
-        if cell.neighbors.is_none() {
-          cell.neighbors = Some(Self::get_neighborhood(
+        if cell.is_dead() {
+          cell.revive();
+          cell_shape.is_visible = true;
+          Self::insert_neighborhood(
             &mut commands,
             &cell_texture.0,
-            &mut entity_map,
+            &mut neighbor_map,
             cell_id,
-          ));
+            false,
+          );
         }
       }
       None => {
-        let neighbors = Some(Self::get_neighborhood(
+        Self::insert_neighborhood(
           &mut commands,
           &cell_texture.0,
-          &mut entity_map,
+          &mut neighbor_map,
           cell_id,
-        ));
-        Self::create_cell_entity(
-          &mut commands,
-          &cell_texture.0,
-          Cell {
-            populated: true,
-            living_neighbors: 0,
-            neighbors,
-          },
-          &mut entity_map,
-          cell_id,
+          false,
         );
       }
     }
   }
 
-  /// Gets neighborhood for cell_id and creates missing neighbors if they don't exist
-  fn get_neighborhood(
+  /// Insert a new neighborhood using the cell with cell_id as the center
+  /// If the neighborhood already exists, update the every neighbors count
+  fn insert_neighborhood(
     mut commands: &mut Commands,
     cell_texture: &Handle<Image>,
-    mut entity_map: &mut HashMap<(i32, i32), Entity>,
+    neighbor_map: &mut HashMap<(i32, i32), Neighbor>,
     cell_id: (i32, i32),
-  ) -> [Entity; 8] {
-    let neighbor_ids = Cell::gen_neighbor_ids(cell_id);
-    let neighbors = neighbor_ids
-    .map(|neighbor_id| {
-      match entity_map.get(&neighbor_id) {
-        Some(neighbor_entity) => *neighbor_entity,
+    is_cell_dead: bool,
+  ) {
+    for id in Cell::gen_neighbor_ids(cell_id) {
+      match neighbor_map.get_mut(&id) {
+        Some(mut neighbor) => {
+          neighbor.neighbor_count = if is_cell_dead {
+            neighbor.neighbor_count - 1
+          } else {neighbor.neighbor_count + 1};
+          if neighbor.neighbor_count > 0 {
+            commands.entity(neighbor.entity).insert(SubjectToRules);
+          }
+        }
         None => {
           // Create a dummy empty cell when there's no cell in this space
-          Self::create_cell_entity(
+          let entity = Self::create_cell_entity(
             &mut commands,
             cell_texture,
-            Cell { populated: false, living_neighbors: 0, neighbors: None },
-            &mut entity_map,
-            neighbor_id,
-          )
+            Cell { id, populated: false },
+            id,
+          );
+          neighbor_map.insert(id, Neighbor {
+            entity,
+            neighbor_count: if is_cell_dead {0} else {1},
+          });
         }
       }
-    });
-    neighbors
+    }
+    if let Some(neighbor) = neighbor_map.get(&cell_id) {
+      if neighbor.neighbor_count > 0 {
+        commands.entity(neighbor.entity).insert(SubjectToRules);
+      }
+    } else {
+      let entity = Self::create_cell_entity(
+        &mut commands,
+        cell_texture,
+        Cell { id: cell_id, populated: true },
+        cell_id,
+      );
+      neighbor_map.insert(cell_id, Neighbor { entity, neighbor_count: 0 });
+    }
   }
 
   fn create_cell_entity(
     commands: &mut Commands,
     cell_texture: &Handle<Image>,
     cell: Cell,
-    entity_map: &mut HashMap<(i32, i32), Entity>,
     cell_id: (i32, i32),
   ) -> Entity {
     let mut entity_cmds = commands.spawn();
     let visibility = Visibility { is_visible: cell.populated };
     let entity = entity_cmds.id();
-    entity_map.insert(cell_id, entity);
     entity_cmds
     .insert(cell)
     .insert(SubjectToRules)
@@ -289,7 +339,13 @@ struct GameRules {
   revive: Range<u8>,
 }
 
-struct EntityMap(HashMap<(i32, i32), Entity>);
+struct NeighborMap(HashMap<(i32, i32), Neighbor>);
+
+#[derive(Debug, Clone)]
+struct Neighbor {
+  entity: Entity,
+  neighbor_count: u8,
+}
 
 impl Cell {
   pub fn gen_neighbor_ids((x, y): (i32, i32)) -> [(i32, i32); 8] {
@@ -304,14 +360,6 @@ impl Cell {
       }
     }
     ids
-  }
-
-  pub fn add_neighbor(&mut self) {
-    self.living_neighbors = self.living_neighbors + 1;
-  }
-
-  pub fn remove_neighbor(&mut self) {
-    self.living_neighbors = self.living_neighbors - 1;
   }
 
   pub fn is_alive(&self) -> bool {
