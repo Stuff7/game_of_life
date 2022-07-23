@@ -226,6 +226,13 @@ impl Cell {
           cell_id,
           false,
         );
+        let entity = Self::create_cell_entity(
+          &mut commands,
+          &cell_texture.0,
+          Cell { id: cell_id, populated: true },
+          cell_id,
+        );
+        neighbor_map.insert(cell_id, Neighbor { entity, neighbor_count: 0 });
       }
     }
   }
@@ -260,15 +267,6 @@ impl Cell {
           });
         }
       }
-    }
-    if !neighbor_map.contains_key(&cell_id) {
-      let entity = Self::create_cell_entity(
-        &mut commands,
-        cell_texture,
-        Cell { id: cell_id, populated: true },
-        cell_id,
-      );
-      neighbor_map.insert(cell_id, Neighbor { entity, neighbor_count: 0 });
     }
   }
 
