@@ -18,7 +18,7 @@ impl Plugin for CellPlugin {
       SystemSet::new()
       .with_run_criteria(FixedTimestep::step(TIME_STEP))
       .with_system(Cell::run_generation.label("run_generation"))
-      .with_system(Cell::update_grid.after("run_generation"))
+      .with_system(Cell::despawn_dead_zones.after("run_generation"))
     )
     .add_system(Cell::highlight)
     .add_system(Cell::spawn);
@@ -107,7 +107,7 @@ impl Cell {
     }
   }
 
-  fn update_grid(
+  fn despawn_dead_zones(
     mut commands: Commands,
     game_rules: Res<GameRules>,
     mut neighbor_map: ResMut<NeighborMap>,
