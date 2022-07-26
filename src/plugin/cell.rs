@@ -46,6 +46,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 fn spawn(
   mut commands: Commands,
   mouse: Res<Input<MouseButton>>,
+  keyboard: Res<Input<KeyCode>>,
   cell_texture: Res<CellTexture>,
   mut neighborhood: ResMut<Neighborhood>,
   cell_frame: Query<&Transform, With<GridSelector>>,
@@ -55,6 +56,7 @@ fn spawn(
     return
   }
 
+  let del_pressed = keyboard.pressed(KeyCode::Delete);
   let cell_frame = cell_frame.single();
   let cell_id = (
     cell_frame.translation.x as i32,
@@ -73,18 +75,25 @@ fn spawn(
 
   match cell {
     Some((mut cell, mut cell_shape)) => {
-      if cell.is_dead() {
+      if del_pressed {
+        if cell.is_alive {
+          cell.die();
+          cell_shape.is_visible = false;
+        }
+      } else if cell.is_dead() {
         cell.revive();
         cell_shape.is_visible = true;
       }
     }
     None => {
-      let entity = create_cell_entity(
-        &mut commands,
-        &cell_texture.handle,
-        Cell { id: cell_id, is_alive: true },
-      );
-      neighborhood.add_neighbor(cell_id, entity);
+      if !del_pressed {
+        let entity = create_cell_entity(
+          &mut commands,
+          &cell_texture.handle,
+          Cell { id: cell_id, is_alive: true },
+        );
+        neighborhood.add_neighbor(cell_id, entity);
+      }
     }
   }
 }
