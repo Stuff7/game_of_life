@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+
 use super::grid::GridSelector;
 use super::grid::CELL_SIZE;
 use super::neighborhood::{NeighborID, Neighborhood};
@@ -9,7 +10,8 @@ impl Plugin for CellPlugin {
   fn build(&self, app: &mut App) {
     app
     .add_startup_system(setup)
-    .add_system(spawn);
+    .add_system(spawn)
+    .add_system(spawn_neighborhood.label("neighborhood-spawn"));
   }
 }
 
@@ -87,25 +89,54 @@ fn spawn(
     }
     None => {
       if !del_pressed {
-        let entity = create_cell_entity(
+        create_cell_entity(
           &mut commands,
           &cell_texture.handle,
+          &mut neighborhood,
           Cell { id: cell_id, is_alive: true },
         );
-        neighborhood.add_neighbor(cell_id, entity);
       }
     }
   }
 }
 
+fn spawn_neighborhood(
+  mut commands: Commands,
+  cell_texture: Res<CellTexture>,
+  mut neighborhood: ResMut<Neighborhood>,
+  cells: Query<&Cell>,
+) {
+  cells.for_each(|cell| {
+    if cell.is_dead() {
+      return;
+    }
+    if let Some(neighbor) = neighborhood.map.get(&cell.id) {
+      for id in neighbor.neighbors_ids {
+        if !neighborhood.map.contains_key(&id) {
+          create_cell_entity(
+            &mut commands,
+            &cell_texture.handle,
+            &mut neighborhood,
+            Cell { id, is_alive: false },
+          );
+        }
+      }
+    }
+  });
+}
+
 pub fn create_cell_entity(
   commands: &mut Commands,
   cell_texture: &Handle<Image>,
+  neighborhood: &mut Neighborhood,
   cell: Cell,
 ) -> Entity {
   let mut entity_cmds = commands.spawn();
   let visibility = Visibility { is_visible: cell.is_alive };
   let entity = entity_cmds.id();
+
+  neighborhood.add_neighbor(cell.id, entity);
+
   entity_cmds
   .insert_bundle(SpriteBundle {
     transform: Transform {
@@ -118,5 +149,6 @@ pub fn create_cell_entity(
     ..default()
   })
   .insert(cell);
+
   entity
 }

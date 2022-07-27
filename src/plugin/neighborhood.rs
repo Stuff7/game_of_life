@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy::core::FixedTimestep;
-use super::cell::{CellTexture, Cell, create_cell_entity};
+
+use super::cell::Cell;
 use crate::Game;
 
 const TIME_STEP: f64 = 1./5.;
@@ -15,8 +16,7 @@ impl Plugin for NeighborhoodPlugin {
     .add_system_set(
       SystemSet::new()
       .label("neighbor-counting")
-      .with_system(spawn.label("spawn"))
-      .with_system(count.after("spawn"))
+      .with_system(count.after("neighborhood-spawn"))
       .with_system(clean_dead)
     )
     .add_system(
@@ -110,35 +110,8 @@ impl Neighbor {
 #[derive(Component)]
 struct DeadNeighborhood;
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-  let cell_texture = asset_server.load("textures/cell.png");
-  commands.insert_resource(CellTexture { handle: cell_texture });
+fn setup(mut commands: Commands) {
   commands.insert_resource(Neighborhood::default());
-}
-
-fn spawn(
-  mut commands: Commands,
-  cell_texture: Res<CellTexture>,
-  mut neighborhood: ResMut<Neighborhood>,
-  cells: Query<&Cell>,
-) {
-  cells.for_each(|cell| {
-    if cell.is_dead() {
-      return;
-    }
-    if let Some(neighbor) = neighborhood.map.get(&cell.id) {
-      for id in neighbor.neighbors_ids {
-        if !neighborhood.map.contains_key(&id) {
-          let entity = create_cell_entity(
-            &mut commands,
-            &cell_texture.handle,
-            Cell { id, is_alive: false },
-          );
-          neighborhood.add_neighbor(id, entity);
-        }
-      }
-    }
-  });
 }
 
 fn count(
