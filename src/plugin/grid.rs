@@ -1,14 +1,13 @@
 use bevy::prelude::*;
 use bevy::input::mouse::MouseMotion;
-use bevy::math::const_vec3;
 
 use super::main_camera::Cursor;
 
 const CELL_IMG_SIZE: f32 = 64.;
 const CELL_PX_SIZE: f32 = 16.;
 const CELL_TRANSFORM_SIZE: f32 = CELL_PX_SIZE / CELL_IMG_SIZE;
-pub const CELL_SIZE: Vec3 = const_vec3!([CELL_TRANSFORM_SIZE, CELL_TRANSFORM_SIZE, 0.]);
-const SELECTOR_STARTING_POSITION: Vec3 = const_vec3!([0., 0., 1.]);
+pub const CELL_SIZE: Vec3 = Vec3::from_array([CELL_TRANSFORM_SIZE, CELL_TRANSFORM_SIZE, 0.]);
+const SELECTOR_STARTING_POSITION: Vec3 = Vec3::from_array([0., 0., 1.]);
 
 pub struct GridPlugin;
 

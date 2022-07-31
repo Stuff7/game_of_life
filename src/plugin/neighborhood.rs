@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use bevy::prelude::*;
-use bevy::core::FixedTimestep;
+use bevy::time::FixedTimestep;
 
 use super::cell::Cell;
 use crate::Game;

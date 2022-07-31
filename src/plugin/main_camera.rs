@@ -1,11 +1,10 @@
 use bevy::prelude::*;
 use bevy::input::mouse::{MouseWheel, MouseMotion};
-use bevy::math::const_vec2;
 
 const ZOOM_SPEED: f32 = 0.1;
 const MIN_ZOOM: f32 = 0.1;
 const MAX_ZOOM: f32 = 4.;
-const PANNING_SPEED: Vec2 = const_vec2!([8., -8.]);
+const PANNING_SPEED: Vec2 = Vec2::from_array([8., -8.]);
 
 pub struct MainCameraPlugin;
 
@@ -24,7 +23,7 @@ pub struct MainCamera;
 
 fn setup(mut commands: Commands) {
   commands.spawn()
-  .insert_bundle(OrthographicCameraBundle::new_2d())
+  .insert_bundle(Camera2dBundle::default())
   .insert(MainCamera);
 
   commands.insert_resource(Cursor::new());
